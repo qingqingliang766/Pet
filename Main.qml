@@ -10,7 +10,7 @@ Window {
     width: 200
     height: 200
     visible: true
-    title: qsTr("水蓝蓝 桌宠")
+    title: qsTr(appSettings.petName + " 桌宠")
     color: "transparent"
     
     // 根据设置动态决定是否在任务栏显示图标
@@ -35,14 +35,19 @@ Window {
         property bool radarEnabled: false // 默认关闭屏幕雷达
         property int radarInterval: 60 // 雷达扫描间隔(秒)，默认60秒
         property int bubbleDuration: 5 // 气泡显示时间(秒)，默认5秒
+        property bool randomMoveEnabled: true // 默认开启乱动模式
+
+        // 新增：宠物形象配置
+        property string petName: "小紫"
+        property string petImagePath: "pet.png" // 默认内置图片
     }
 
     // 系统托盘图标（右下角）
     Platform.SystemTrayIcon {
         id: trayIcon
         visible: true
-        icon.source: "qrc:/Pet/pet.png" 
-        tooltip: "水蓝蓝 桌宠"
+        icon.source: appSettings.petImagePath === "pet.png" ? "qrc:/qt/qml/Pet/pet.png" : appSettings.petImagePath
+        tooltip: appSettings.petName + " 桌宠"
 
         menu: Platform.Menu {
             Platform.MenuItem {
@@ -52,6 +57,10 @@ Window {
             Platform.MenuItem {
                 text: "💬 跟我聊天"
                 onTriggered: chatWindow.show()
+            }
+            Platform.MenuItem {
+                text: "🎨 形象设置"
+                onTriggered: appearanceWindow.show()
             }
             Platform.MenuItem {
                 text: "⚙️ 设置 API"
@@ -71,16 +80,54 @@ Window {
 
     // 将窗口初始化在屏幕右下角
     Component.onCompleted: {
+        if (appSettings.petName === "水蓝蓝") {
+            appSettings.petName = "小紫"
+        }
+        if (appSettings.petImagePath === ""
+                || appSettings.petImagePath === "qrc:/Pet/pet.png"
+                || appSettings.petImagePath.indexOf("pet.webp") !== -1
+                || appSettings.petImagePath.indexOf("oeet.webp") !== -1) {
+            appSettings.petImagePath = "pet.png"
+        }
         x = Screen.desktopAvailableWidth - width - 50
         y = Screen.desktopAvailableHeight - height - 50
     }
 
-    // 宠物本体图片
-    Image {
-        id: petImage
+    // 宠物本体图片（静态图和动图都支持）
+    Item {
+        id: petContainer
         anchors.fill: parent
-        source: "pet.png" 
-        fillMode: Image.PreserveAspectFit
+        property bool useAnimated: {
+            var p = appSettings.petImagePath.toLowerCase()
+            return p.indexOf(".gif") !== -1 || p.indexOf(".webp") !== -1
+        }
+
+        Image {
+            id: petImageStatic
+            anchors.fill: parent
+            visible: !petContainer.useAnimated
+            source: !petContainer.useAnimated ? appSettings.petImagePath : ""
+            fillMode: Image.PreserveAspectFit
+            onStatusChanged: {
+                if (status === Image.Error && source !== "pet.png") {
+                    appSettings.petImagePath = "pet.png"
+                }
+            }
+        }
+
+        AnimatedImage {
+            id: petImageAnimated
+            anchors.fill: parent
+            visible: petContainer.useAnimated
+            source: petContainer.useAnimated ? appSettings.petImagePath : ""
+            fillMode: Image.PreserveAspectFit
+            playing: true
+            onStatusChanged: {
+                if (status === Image.Error && source !== "pet.png") {
+                    appSettings.petImagePath = "pet.png"
+                }
+            }
+        }
 
         // 鼠标拖拽与点击功能
         MouseArea {
@@ -109,7 +156,6 @@ Window {
             onReleased: function(mouse) {
                 if (!isDragging) {
                     if (mouse.button === Qt.LeftButton) {
-                        // 如果菜单正开着，点击左键就只是关闭菜单，不触发聊天
                         if (contextMenu.opened) {
                             contextMenu.close();
                             return;
@@ -132,7 +178,7 @@ Window {
         // 当菜单关闭时确保状态同步
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         
-        // 关键：当主窗口失去焦点时，强制关闭菜单（这是解决 Windows 无边框窗口菜单不消失的终极办法）
+        // 关键：当主窗口失去焦点时，强制关闭菜单
         Connections {
             target: mainWindow
             function onActiveChanged() {
@@ -145,6 +191,10 @@ Window {
         MenuItem { 
             text: "💬 跟我聊天"
             onTriggered: chatWindow.show()
+        }
+        MenuItem { 
+            text: "🎨 形象设置"
+            onTriggered: appearanceWindow.show()
         }
         MenuItem { 
             text: "⚙️ 设置 API"
@@ -244,7 +294,7 @@ Window {
                 var title = sysCtrl.getActiveWindowTitle();
                 console.log("Radar Scan Triggered. Current Active Window:", title); 
                 
-                if (title !== "" && title.indexOf("水蓝蓝") === -1 && title.indexOf("PetApp") === -1 && title.indexOf("WorkerW") === -1 && title.indexOf("Program Manager") === -1) {
+                if (title !== "" && title.indexOf(appSettings.petName) === -1 && title.indexOf("PetApp") === -1 && title.indexOf("WorkerW") === -1 && title.indexOf("Program Manager") === -1) {
                     radarAnalyze(title);
                 } else {
                     console.log("Radar Ignored this window (Self, Desktop, or Empty).");
@@ -279,7 +329,7 @@ Window {
         var body = JSON.stringify({
             "model": appSettings.llmModelName,
             "messages": [
-                {"role": "system", "content": "你是一只叫水蓝蓝的可爱桌宠，陪伴在主人屏幕右下角。"},
+                {"role": "system", "content": "你是一只叫" + appSettings.petName + "的可爱桌宠，陪伴在主人屏幕右下角。"},
                 {"role": "user", "content": "主人当前正在看这个窗口/软件：【" + windowTitle + "】。请你结合这个软件名称，给出一句简短可爱的关心、吐槽或建议（不要超过15个字）。"}
             ],
             "temperature": 0.7
@@ -293,7 +343,7 @@ Window {
         running: true
         repeat: true
         onTriggered: {
-            if (petState === "idle") {
+            if (petState === "idle" && appSettings.randomMoveEnabled) {
                 if (Math.random() < 0.3) {
                     moveToRandomPosition();
                 }
@@ -347,7 +397,7 @@ Window {
         id: chatWindow
         width: 350
         height: 120
-        title: "与水蓝蓝聊天"
+        title: "与" + appSettings.petName + "聊天"
         flags: Qt.Window | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint 
         color: "#ffffff"
         
@@ -372,7 +422,7 @@ Window {
                 Row {
                     width: parent.width
                     Text { 
-                        text: "和水蓝蓝说点什么吧~"
+                        text: "和" + appSettings.petName + "说点什么吧~"
                         color: "#666"
                         font.bold: true
                         anchors.verticalCenter: parent.verticalCenter
@@ -382,7 +432,6 @@ Window {
                         text: "×"
                         width: 30
                         height: 30
-                        background: Rectangle { color: "transparent" }
                         onClicked: chatWindow.hide()
                     }
                 }
@@ -446,10 +495,10 @@ Window {
                                                     var msgObj = response.choices[0].message;
                                                     var reply = msgObj.content;
                                                     if (!reply || reply.trim() === "") {
-                                                        reply = msgObj.reasoning_content || "（水蓝蓝发呆中...）";
+                                                        reply = msgObj.reasoning_content || "（" + appSettings.petName + "发呆中...）";
                                                     }
                                                     showChatBubble(reply);
-                                                    addHistory("水蓝蓝", reply); 
+                                                    addHistory(appSettings.petName, reply); 
                                                 } else {
                                                     showChatBubble("API返回了未知格式的数据。");
                                                 }
@@ -463,7 +512,7 @@ Window {
                                 }
 
                                 var apiMessages = [
-                                    {"role": "system", "content": "你是一只叫水蓝蓝的可爱桌宠，请用简短、活泼的语气回复主人的话。字数尽量控制在20字以内。"}
+                                    {"role": "system", "content": "你是一只叫" + appSettings.petName + "的可爱桌宠，请用简短、活泼的语气回复主人的话。字数尽量控制在20字以内。"}
                                 ];
                                 
                                 // 提取最近的10条历史记录发送给模型
@@ -485,13 +534,118 @@ Window {
                                 });
                                 xhr.send(body);
                             }
+                    }
+                }
+            }
+        }
+    }
+    }
+
+    // 5. 形象设置窗口
+    Window {
+        id: appearanceWindow
+        width: 350
+        height: 250
+        title: "形象设置"
+        flags: Qt.Window | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
+        color: "#ffffff"
+        
+        onActiveChanged: {
+            if (!active) {
+                hide();
+            }
+        }
+
+        // 文件选择对话框
+        Platform.FileDialog {
+            id: fileDialog
+            title: "选择宠物形象图片"
+            nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.gif *.webp)"]
+            onAccepted: {
+                // 转换为兼容的 file:/// 格式路径
+                var path = fileDialog.file.toString();
+                if (path.indexOf("file:///") !== 0 && path.indexOf("file://") === 0) {
+                    // Qt 在某些平台上可能会返回 file://C:/...
+                    path = "file:///" + path.substring(7);
+                }
+                appSettings.petImagePath = path;
+                pathInput.text = path;
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            border.color: "#88ccff"
+            border.width: 2
+            radius: 8
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 20
+                spacing: 15
+
+                Row {
+                    width: parent.width
+                    Text { text: "自定义形象"; font.bold: true; font.pixelSize: 16 }
+                    Item { Layout.fillWidth: true } 
+                    Button {
+                        text: "×"
+                        width: 30
+                        height: 30
+                        onClicked: appearanceWindow.hide()
+                    }
+                }
+
+                TextField {
+                    id: nameInput
+                    width: parent.width
+                    placeholderText: "给它起个新名字吧"
+                    text: appSettings.petName
+                }
+
+                Row {
+                    spacing: 10
+                    width: parent.width
+                    TextField {
+                        id: pathInput
+                        width: parent.width - selectBtn.width - 10
+                        text: appSettings.petImagePath
+                        readOnly: true
+                    }
+                    Button {
+                        id: selectBtn
+                        text: "浏览文件"
+                        onClicked: fileDialog.open()
+                    }
+                }
+
+                Item { height: 10; width: 1 } 
+
+                Row {
+                    anchors.right: parent.right
+                    spacing: 10
+                    Button {
+                        text: "恢复默认"
+                        onClicked: {
+                            appSettings.petName = "小紫"
+                            appSettings.petImagePath = "pet.png"
+                            nameInput.text = "小紫"
+                            pathInput.text = "pet.png"
+                        }
+                    }
+                    Button {
+                        text: "保存"
+                        onClicked: {
+                            appSettings.petName = nameInput.text;
+                            // appSettings.petImagePath 会在 FileDialog 选中时自动更新，或者手动输入
+                            appearanceWindow.hide();
+                            showChatBubble("我已经变身成 " + appSettings.petName + " 啦！");
                         }
                     }
                 }
             }
         }
     }
-
     // 2. 设置窗口
     Window {
         id: settingsWindow
@@ -526,7 +680,6 @@ Window {
                         text: "×"
                         width: 30
                         height: 30
-                        background: Rectangle { color: "transparent" }
                         onClicked: settingsWindow.hide()
                     }
                 }
@@ -614,6 +767,7 @@ Window {
             }
         }
     }
+    }
 
     // 3. 雷达独立设置窗口
     Window {
@@ -649,7 +803,6 @@ Window {
                         text: "×"
                         width: 30
                         height: 30
-                        background: Rectangle { color: "transparent" }
                         onClicked: radarSettingsWindow.hide()
                     }
                 }
@@ -658,6 +811,12 @@ Window {
                     id: radarCheck
                     text: "开启屏幕雷达 (定时分析当前窗口并互动)"
                     checked: appSettings.radarEnabled
+                }
+
+                CheckBox {
+                    id: randomMoveCheck
+                    text: "开启乱动模式 (空闲时随机移动)"
+                    checked: appSettings.randomMoveEnabled
                 }
 
                 Row {
@@ -690,13 +849,10 @@ Window {
                         onClicked: {
                             appSettings.radarEnabled = radarCheck.checked;
                             appSettings.radarInterval = intervalSpin.value;
+                            appSettings.randomMoveEnabled = randomMoveCheck.checked;
                             
                             radarSettingsWindow.hide();
-                            if (radarCheck.checked) {
-                                showChatBubble("雷达已开启！\n每 " + intervalSpin.value + " 秒我会看看你在干嘛~");
-                            } else {
-                                showChatBubble("雷达已关闭，我乖乖待着啦~");
-                            }
+                            showChatBubble("设置已更新：\n雷达" + (radarCheck.checked ? "开启" : "关闭") + "，乱动" + (randomMoveCheck.checked ? "开启" : "关闭"));
                         }
                     }
                 }
@@ -718,7 +874,7 @@ Window {
             spacing: 10
             
             Text {
-                text: "与水蓝蓝的聊天记录"
+                text: "与" + appSettings.petName + "的聊天记录"
                 font.bold: true
                 font.pixelSize: 16
             }
@@ -776,5 +932,4 @@ Window {
             }
         }
     }
-}
 }
