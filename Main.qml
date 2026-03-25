@@ -39,14 +39,14 @@ Window {
 
         // 新增：宠物形象配置
         property string petName: "小紫"
-        property string petImagePath: "pet.png" // 默认内置图片
+        property string petImagePath: "qrc:/qt/qml/Pet/pet.png"
     }
 
     // 系统托盘图标（右下角）
     Platform.SystemTrayIcon {
         id: trayIcon
         visible: true
-        icon.source: appSettings.petImagePath === "pet.png" ? "qrc:/qt/qml/Pet/pet.png" : appSettings.petImagePath
+        icon.source: appSettings.petImagePath
         tooltip: appSettings.petName + " 桌宠"
 
         menu: Platform.Menu {
@@ -84,10 +84,11 @@ Window {
             appSettings.petName = "小紫"
         }
         if (appSettings.petImagePath === ""
+                || appSettings.petImagePath === "pet.png"
                 || appSettings.petImagePath === "qrc:/Pet/pet.png"
                 || appSettings.petImagePath.indexOf("pet.webp") !== -1
                 || appSettings.petImagePath.indexOf("oeet.webp") !== -1) {
-            appSettings.petImagePath = "pet.png"
+            appSettings.petImagePath = "qrc:/qt/qml/Pet/pet.png"
         }
         x = Screen.desktopAvailableWidth - width - 50
         y = Screen.desktopAvailableHeight - height - 50
@@ -99,18 +100,34 @@ Window {
         anchors.fill: parent
         property bool useAnimated: {
             var p = appSettings.petImagePath.toLowerCase()
-            return p.indexOf(".gif") !== -1 || p.indexOf(".webp") !== -1
+            return p.indexOf(".gif") !== -1
+        }
+
+        property string defaultPetPath: "qrc:/qt/qml/Pet/pet.png"
+
+        function resetToDefaultPet() {
+            console.log("Image load failed, resetting to default pet.png")
+            appSettings.petImagePath = petContainer.defaultPetPath
         }
 
         Image {
             id: petImageStatic
             anchors.fill: parent
             visible: !petContainer.useAnimated
-            source: !petContainer.useAnimated ? appSettings.petImagePath : ""
             fillMode: Image.PreserveAspectFit
+            cache: false
+            asynchronous: true
+            source: {
+                if (petContainer.useAnimated) return ""
+                var path = appSettings.petImagePath
+                if (path === "") return petContainer.defaultPetPath
+                return path
+            }
             onStatusChanged: {
-                if (status === Image.Error && source !== "pet.png") {
-                    appSettings.petImagePath = "pet.png"
+                console.log("Static image status:", status, "source:", source)
+                if (status === Image.Error && source.toString().indexOf("pet.png") === -1) {
+                    console.log("Static image error!")
+                    petContainer.resetToDefaultPet()
                 }
             }
         }
@@ -119,12 +136,20 @@ Window {
             id: petImageAnimated
             anchors.fill: parent
             visible: petContainer.useAnimated
-            source: petContainer.useAnimated ? appSettings.petImagePath : ""
             fillMode: Image.PreserveAspectFit
             playing: true
+            cache: false
+            source: {
+                if (!petContainer.useAnimated) return ""
+                var path = appSettings.petImagePath
+                if (path === "") return ""
+                return path
+            }
             onStatusChanged: {
-                if (status === Image.Error && source !== "pet.png") {
-                    appSettings.petImagePath = "pet.png"
+                console.log("Animated image status:", status, "source:", source)
+                if (status === Image.Error && source.toString().indexOf("pet.png") === -1) {
+                    console.log("Animated image error!")
+                    petContainer.resetToDefaultPet()
                 }
             }
         }
@@ -562,10 +587,8 @@ Window {
             title: "选择宠物形象图片"
             nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.gif *.webp)"]
             onAccepted: {
-                // 转换为兼容的 file:/// 格式路径
                 var path = fileDialog.file.toString();
                 if (path.indexOf("file:///") !== 0 && path.indexOf("file://") === 0) {
-                    // Qt 在某些平台上可能会返回 file://C:/...
                     path = "file:///" + path.substring(7);
                 }
                 appSettings.petImagePath = path;
@@ -628,16 +651,15 @@ Window {
                         text: "恢复默认"
                         onClicked: {
                             appSettings.petName = "小紫"
-                            appSettings.petImagePath = "pet.png"
+                            appSettings.petImagePath = "qrc:/qt/qml/Pet/pet.png"
                             nameInput.text = "小紫"
-                            pathInput.text = "pet.png"
+                            pathInput.text = "qrc:/qt/qml/Pet/pet.png"
                         }
                     }
                     Button {
                         text: "保存"
                         onClicked: {
                             appSettings.petName = nameInput.text;
-                            // appSettings.petImagePath 会在 FileDialog 选中时自动更新，或者手动输入
                             appearanceWindow.hide();
                             showChatBubble("我已经变身成 " + appSettings.petName + " 啦！");
                         }
