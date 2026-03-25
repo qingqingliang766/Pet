@@ -156,10 +156,21 @@ Window {
 
         // 鼠标拖拽与点击功能
         MouseArea {
+            id: mouseArea
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
+            hoverEnabled: true
             property point startPos
             property bool isDragging: false
+            property bool isHovered: false
+
+            onEntered: {
+                isHovered = true
+            }
+
+            onExited: {
+                isHovered = false
+            }
 
             onPressed: function(mouse) {
                 startPos = Qt.point(mouse.x, mouse.y)
@@ -368,7 +379,7 @@ Window {
         running: true
         repeat: true
         onTriggered: {
-            if (petState === "idle" && appSettings.randomMoveEnabled) {
+            if (petState === "idle" && appSettings.randomMoveEnabled && !mouseArea.isHovered && !contextMenu.opened) {
                 if (Math.random() < 0.3) {
                     moveToRandomPosition();
                 }
